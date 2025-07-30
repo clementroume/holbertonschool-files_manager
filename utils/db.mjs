@@ -7,30 +7,26 @@ class DBClient {
   /**
    * Creates a new DBClient instance.
    * It reads environment variables to configure the connection
-   * and initiates the connection process.
+   * and initiates the connection process in the background.
    */
   constructor() {
     // Read environment variables with default values
     const host = process.env.DB_HOST || 'localhost';
     const port = process.env.DB_PORT || 27017;
-    const database = process.env.DB_DATABASE || 'files_manager';
+    this.database = process.env.DB_DATABASE || 'files_manager';
 
-    // Construct the MongoDb connection URL
+    // Construct the MongoDB connection URL
     const url = `mongodb://${host}:${port}`;
 
-    // Create a new MongoClient
+    // Create a new MongoClient with the recommended option
     this.client = new mongodb.MongoClient(url, { useUnifiedTopology: true });
 
-    // Initiate the connection. The driver will queue operations until it's complete.
-    this.client
-      .connect()
-      .then(() => {
-        this.client.connected = true;
-        this.db = this.client.db(database);
-      })
-      .catch((error) => {
-        console.error('MongoDB connection error:', error);
-      });
+    // Initiate the connection and store the promise.
+    // This allows other methods to wait for the connection to complete.
+    this.connectionPromise = this.client.connect().catch((err) => {
+      // Catch initial connection errors to prevent unhandled promise rejections
+      console.error('Initial MongoDB connection error:', err.message);
+    });
   }
 
   /**
@@ -38,6 +34,7 @@ class DBClient {
    * @returns {boolean} True if the client is connected, otherwise false.
    */
   isAlive() {
+    // isConnected is deprecated but required for the project's tests with mongodb v3
     return this.client.isConnected();
   }
 
@@ -46,10 +43,14 @@ class DBClient {
    * @returns {Promise<number>} The total number of users.
    */
   async nbUsers() {
-    if (!this.isAlive()) {
+    try {
+      await this.connectionPromise; // Ensure connection is complete before proceeding
+      const db = this.client.db(this.database);
+      return await db.collection('users').countDocuments();
+    } catch (err) {
+      console.error('Error in nbUsers:', err.message);
       return 0;
     }
-    return this.db.collection('users').countDocuments();
   }
 
   /**
@@ -57,10 +58,14 @@ class DBClient {
    * @returns {Promise<number>} The total number of files.
    */
   async nbFiles() {
-    if (!this.isAlive()) {
+    try {
+      await this.connectionPromise; // Ensure connection is complete before proceeding
+      const db = this.client.db(this.database);
+      return await db.collection('files').countDocuments();
+    } catch (err) {
+      console.error('Error in nbFiles:', err.message);
       return 0;
     }
-    return this.db.collection('files').countDocuments();
   }
 }
 
