@@ -21,20 +21,15 @@ class DBClient {
     // Create a new MongoClient
     this.client = new mongodb.MongoClient(url, { useUnifiedTopology: true });
 
-    // Internal state to track connection status
-    this._connected = false;
-    this.db = null;
-
-    // Start the connection process and update state upon completion
+    // Initiate the connection. The driver will queue operations until it's complete.
     this.client
       .connect()
       .then(() => {
+        this.client.connected = true;
         this.db = this.client.db(database);
-        this._connected = true;
       })
-      .catch((err) => {
-        console.error('MongoDB connection error:', err.message);
-        this._connected = false;
+      .catch((error) => {
+        console.error('MongoDB connection error:', error);
       });
   }
 
@@ -43,7 +38,7 @@ class DBClient {
    * @returns {boolean} True if the client is connected, otherwise false.
    */
   isAlive() {
-    return this._connected;
+    return this.client.isConnected();
   }
 
   /**
@@ -54,14 +49,7 @@ class DBClient {
     if (!this.isAlive()) {
       return 0;
     }
-    try {
-      const db = this.client.db(this.dbName);
-      const usersCollection = db.collection('users');
-      return await usersCollection.countDocuments();
-    } catch (err) {
-      console.error('Error counting users:', err);
-      return 0;
-    }
+    return this.db.collection('users').countDocuments();
   }
 
   /**
@@ -72,16 +60,10 @@ class DBClient {
     if (!this.isAlive()) {
       return 0;
     }
-    try {
-      const db = this.client.db(this.dbName);
-      const filesCollection = db.collection('files');
-      return await filesCollection.countDocuments();
-    } catch (err) {
-      console.error('Error counting files:', err);
-      return 0;
-    }
+    return this.db.collection('files').countDocuments();
   }
 }
 
+// Create and export a single instance of the client
 const dbClient = new DBClient();
 export default dbClient;
