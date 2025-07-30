@@ -1,4 +1,4 @@
-import { MongoClient } from 'mongodb';
+import mongodb from 'mongodb';
 
 /**
  * Represents a client for interacting with a MongoDB server.
@@ -19,7 +19,7 @@ class DBClient {
     const url = `mongodb://${host}:${port}`;
 
     // Create a new MongoClient
-    this.client = new MongoClient(url);
+    this.client = new mongodb.MongoClient(url, { useUnifiedTopology: true });
 
     // Internal state to track connection status
     this._connected = false;
