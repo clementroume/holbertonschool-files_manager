@@ -28,7 +28,7 @@ class AppController {
       const userCount = await dbClient.nbUsers();
       const fileCount = await dbClient.nbFiles();
       res.status(200).json({ users: userCount, files: fileCount });
-    } catch {
+    } catch (error) {
       console.error('Could not get stats:', error);
       res.status(500).json({ error: 'Internal Server Error' });
     }

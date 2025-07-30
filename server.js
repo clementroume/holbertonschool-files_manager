@@ -1,5 +1,6 @@
-const express = require('express');
 import router from './routes/index';
+
+const express = require('express');
 
 // Create the Express application
 const app = express();
