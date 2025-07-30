@@ -22,15 +22,7 @@ class DBClient {
     this.client = new mongodb.MongoClient(url, { useUnifiedTopology: true });
 
     // Initiate the connection. The driver will queue operations until it's complete.
-    this.client
-      .connect()
-      .then(() => {
-        this.client.connected = true;
-        this.db = this.client.db(database);
-      })
-      .catch((error) => {
-        console.error('MongoDB connection error:', error);
-      });
+    this.client.connect();
   }
 
   /**
@@ -46,10 +38,8 @@ class DBClient {
    * @returns {Promise<number>} The total number of users.
    */
   async nbUsers() {
-    if (!this.isAlive()) {
-      return 0;
-    }
-    return this.db.collection('users').countDocuments();
+    const db = this.client.db(this.database);
+    return db.collection('users').countDocuments();
   }
 
   /**
@@ -57,10 +47,8 @@ class DBClient {
    * @returns {Promise<number>} The total number of files.
    */
   async nbFiles() {
-    if (!this.isAlive()) {
-      return 0;
-    }
-    return this.db.collection('files').countDocuments();
+    const db = this.client.db(this.database);
+    return db.collection('files').countDocuments();
   }
 }
 
