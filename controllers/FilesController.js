@@ -17,11 +17,13 @@ class FilesController {
   static async postUpload(req, res) {
     const token = req.headers['x-token'];
     if (!token) {
-      return res.status(401).json({ error: 'Unauthorized' });
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
     }
     const userId = await redisClient.get(`auth_${token}`);
     if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
     }
 
     const {
@@ -33,14 +35,17 @@ class FilesController {
     } = req.body || {};
 
     if (!name) {
-      return res.status(400).json({ error: 'Missing name' });
+      res.status(400).json({ error: 'Missing name' });
+      return;
     }
     const acceptedTypes = ['folder', 'file', 'image'];
     if (!type || !acceptedTypes.includes(type)) {
-      return res.status(400).json({ error: 'Missing type' });
+      res.status(400).json({ error: 'Missing type' });
+      return;
     }
     if (type !== 'folder' && !data) {
-      return res.status(400).json({ error: 'Missing data' });
+      res.status(400).json({ error: 'Missing data' });
+      return;
     }
 
     try {
@@ -52,10 +57,12 @@ class FilesController {
           _id: new ObjectId(parentId),
         });
         if (!parentFile) {
-          return res.status(400).json({ error: 'Parent not found' });
+          res.status(400).json({ error: 'Parent not found' });
+          return;
         }
         if (parentFile.type !== 'folder') {
-          return res.status(400).json({ error: 'Parent is not a folder' });
+          res.status(400).json({ error: 'Parent is not a folder' });
+          return;
         }
       }
 
@@ -69,10 +76,15 @@ class FilesController {
 
       if (type === 'folder') {
         const result = await filesCollection.insertOne(newFileDocument);
-        return res.status(201).json({
+        res.status(201).json({
           id: result.insertedId,
-          ...newFileDocument,
+          userId: newFileDocument.userId,
+          name: newFileDocument.name,
+          type: newFileDocument.type,
+          isPublic: newFileDocument.isPublic,
+          parentId: newFileDocument.parentId,
         });
+        return;
       }
 
       const folderPath = process.env.FOLDER_PATH || '/tmp/files_manager';
@@ -89,7 +101,7 @@ class FilesController {
       newFileDocument.localPath = localPath;
       const result = await filesCollection.insertOne(newFileDocument);
 
-      return res.status(201).json({
+      res.status(201).json({
         id: result.insertedId,
         userId: newFileDocument.userId,
         name: newFileDocument.name,
@@ -97,12 +109,14 @@ class FilesController {
         isPublic: newFileDocument.isPublic,
         parentId: newFileDocument.parentId,
       });
+      return;
     } catch (error) {
       if (error.name === 'BSONTypeError') {
-        return res.status(400).json({ error: 'Parent not found' });
+        res.status(400).json({ error: 'Parent not found' });
+        return;
       }
       console.error('Error during file upload:', error);
-      return res.status(500).json({ error: 'Internal Server Error' });
+      res.status(500).json({ error: 'Internal Server Error' });
     }
   }
 
@@ -113,30 +127,43 @@ class FilesController {
    */
   static async getShow(req, res) {
     const token = req.headers['x-token'];
-    if (!token) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
     const userId = await redisClient.get(`auth_${token}`);
+
     if (!userId) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
+    let file;
+
     try {
-      const db = dbClient.client.db(process.env.DB_DATABASE || 'files_manager');
-      const file = await db.collection('files').findOne({
+      file = await dbClient.db.collection('files').findOne({
         _id: new ObjectId(req.params.id),
         userId: new ObjectId(userId),
       });
-
-      if (!file) {
-        return res.status(404).json({ error: 'Not found' });
-      }
-
-      return res.status(200).json(file);
-    } catch (error) {
-      console.error('Error in getShow:', error);
-      return res.status(500).json({ error: 'Internal Server Error' });
+    } catch (err) {
+      return res.status(404).json({ error: 'Not found' });
     }
+
+    if (!file) {
+      return res.status(404).json({ error: 'Not found' });
+    }
+
+    let resParentId;
+
+    if (file.parentId === '0' || file.parentId === 0) {
+      resParentId = 0;
+    } else {
+      resParentId = file.parentId.toString();
+    }
+
+    return res.status(200).json({
+      id: file._id.toString(),
+      userId: file.userId.toString(),
+      name: file.name,
+      type: file.type,
+      isPublic: file.isPublic,
+      parentId: resParentId,
+    });
   }
 
   /**
@@ -146,40 +173,53 @@ class FilesController {
    */
   static async getIndex(req, res) {
     const token = req.headers['x-token'];
-    if (!token) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
     const userId = await redisClient.get(`auth_${token}`);
+
     if (!userId) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const parentId = req.query.parentId || '0';
-    const page = parseInt(req.query.page, 10) || 0;
-    const pageSize = 20;
+    const { parentId = '0' } = req.query;
+    let page = parseInt(req.query.page, 10);
 
-    try {
-      const db = dbClient.client.db(process.env.DB_DATABASE || 'files_manager');
-      const filesCollection = db.collection('files');
-
-      const pipeline = [
-        {
-          $match: {
-            userId: new ObjectId(userId),
-            parentId: parentId === '0' ? 0 : new ObjectId(parentId),
-          },
-        },
-        { $skip: page * pageSize },
-        { $limit: pageSize },
-      ];
-
-      const files = await filesCollection.aggregate(pipeline).toArray();
-
-      return res.status(200).json(files);
-    } catch (error) {
-      console.error('Error in getIndex:', error);
-      return res.status(500).json({ error: 'Internal Server Error' });
+    if (Number.isNaN(page) || page < 0) {
+      page = 0;
     }
+
+    const filterParentId = parentId === '0' ? 0 : new ObjectId(parentId);
+
+    const files = await dbClient.db
+      .collection('files')
+      .find({
+        userId: new ObjectId(userId),
+        parentId: filterParentId,
+      })
+      .skip(page * 20)
+      .limit(20)
+      .toArray();
+
+    const result = [];
+
+    for (const file of files) {
+      let resPid;
+
+      if (file.parentId === '0' || file.parentId === 0) {
+        resPid = 0;
+      } else {
+        resPid = file.parentId.toString();
+      }
+
+      result.push({
+        id: file._id.toString(),
+        userId: file.userId.toString(),
+        name: file.name,
+        type: file.type,
+        isPublic: file.isPublic,
+        parentId: resPid,
+      });
+    }
+
+    return res.status(200).json(result);
   }
 }
 
