@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs';
 import path from 'path';
 import dbClient from '../utils/db';
-import redisClient from '../utils/redis';
+import getAuthenticatedUserId from '../utils/auth';
 
 /**
  * Controller for handling file-related endpoints.
@@ -15,14 +15,7 @@ class FilesController {
    * @param {object} res The Express response object.
    */
   static async postUpload(req, res) {
-    const token = req.headers['x-token'];
-    if (!token) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-    const userId = await redisClient.get(`auth_${token}`);
-    if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
+    const userId = await getAuthenticatedUserId(req, res);
 
     const {
       name,
@@ -102,6 +95,68 @@ class FilesController {
         return res.status(400).json({ error: 'Parent not found' });
       }
       console.error('Error during file upload:', error);
+      return res.status(500).json({ error: 'Internal Server Error' });
+    }
+  }
+
+  /**
+   * Retrieves a file document based on its ID.
+   * @param {object} req The Express request object.
+   * @param {object} res The Express response object.
+   */
+  static async getShow(req, res) {
+    const userId = await getAuthenticatedUserId(req, res);
+
+    try {
+      const db = dbClient.client.db(process.env.DB_DATABASE || 'files_manager');
+      const file = await db.collection('files').findOne({
+        _id: new ObjectId(req.params.id),
+        userId: new ObjectId(userId),
+      });
+
+      if (!file) {
+        return res.status(404).json({ error: 'Not found' });
+      }
+
+      return res.status(200).json(file);
+    } catch (error) {
+      console.error('Error in getShow:', error);
+      return res.status(500).json({ error: 'Internal Server Error' });
+    }
+  }
+
+  /**
+   * Retrieves a paginated list of file documents.
+   * @param {object} req The Express request object.
+   * @param {object} res The Express response object.
+   */
+  static async getIndex(req, res) {
+    const userId = await getAuthenticatedUserId(req, res);
+
+    const parentId = req.query.parentId || '0';
+    const page = parseInt(req.query.page, 10) || 0;
+    const pageSize = 20;
+
+    try {
+      const db = dbClient.client.db(process.env.DB_DATABASE || 'files_manager');
+      const filesCollection = db.collection('files');
+
+      const pipeline = [
+        {
+          $match: {
+            userId: new ObjectId(userId),
+            parentId: parentId === '0' ? 0 : new ObjectId(parentId),
+          },
+        },
+        { $skip: page * pageSize },
+        { $limit: pageSize },
+      ];
+
+      const files = await filesCollection.aggregate(pipeline).toArray();
+
+      return res.status(200).json(files);
+    } catch (error) {
+      console.error('Error in getIndex:', error);
       return res.status(500).json({ error: 'Internal Server Error' });
     }
   }

@@ -10,7 +10,7 @@ const port = process.env.PORT || 5050;
 
 // Middleware to parse JSON request bodies
 // Important for POST and PUT requests
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
 
 // Load all routes from the routes/index.js file
 app.use(router);
