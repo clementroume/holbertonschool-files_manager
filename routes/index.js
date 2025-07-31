@@ -1,6 +1,7 @@
 import express from 'express';
 import AppController from '../controllers/AppController';
 import UsersController from '../controllers/UsersController';
+import AuthController from '../controllers/AuthController';
 
 // Create a new router instance
 const router = express.Router();
@@ -16,6 +17,18 @@ router.get('/stats', AppController.getStats);
 // Define the /users route
 // It calls the postNew method from the UsersController
 router.post('/users', UsersController.postNew);
+
+// Define the /users/me route
+// It calls the getMe method from the UsersController
+router.get('/users/me', UsersController.getMe);
+
+// Define the /users/me route
+// It calls the getMe method from the UsersController
+router.get('/connect', AuthController.getConnect);
+
+// Define the /users/me route
+// It calls the getMe method from the UsersController
+router.get('/disconnect', AuthController.getDisconnect);
 
 // Export the router to be used in server.js
 export default router;
