@@ -127,43 +127,44 @@ class FilesController {
    */
   static async getShow(req, res) {
     const token = req.headers['x-token'];
+    if (!token) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
     const userId = await redisClient.get(`auth_${token}`);
-
     if (!userId) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    let file;
-
     try {
-      file = await dbClient.db.collection('files').findOne({
+      const db = dbClient.client.db(process.env.DB_DATABASE || 'files_manager');
+      const file = await db.collection('files').findOne({
         _id: new ObjectId(req.params.id),
         userId: new ObjectId(userId),
       });
-    } catch (err) {
-      return res.status(404).json({ error: 'Not found' });
+
+      if (!file) {
+        return res.status(404).json({ error: 'Not found' });
+      }
+
+      // Manually format the response object to match test expectations
+      const resParentId = file.parentId === '0' || file.parentId === 0 ? 0 : file.parentId.toString();
+
+      return res.status(200).json({
+        id: file._id.toString(),
+        userId: file.userId.toString(),
+        name: file.name,
+        type: file.type,
+        isPublic: file.isPublic,
+        parentId: resParentId,
+      });
+    } catch (error) {
+      // Handle cases where the file ID is not a valid ObjectId
+      if (error.name === 'BSONTypeError') {
+        return res.status(404).json({ error: 'Not found' });
+      }
+      console.error('Error in getShow:', error);
+      return res.status(500).json({ error: 'Internal Server Error' });
     }
-
-    if (!file) {
-      return res.status(404).json({ error: 'Not found' });
-    }
-
-    let resParentId;
-
-    if (file.parentId === '0' || file.parentId === 0) {
-      resParentId = 0;
-    } else {
-      resParentId = file.parentId.toString();
-    }
-
-    return res.status(200).json({
-      id: file._id.toString(),
-      userId: file.userId.toString(),
-      name: file.name,
-      type: file.type,
-      isPublic: file.isPublic,
-      parentId: resParentId,
-    });
   }
 
   /**
@@ -186,40 +187,44 @@ class FilesController {
       page = 0;
     }
 
-    const filterParentId = parentId === '0' ? 0 : new ObjectId(parentId);
+    try {
+      const db = dbClient.client.db(process.env.DB_DATABASE || 'files_manager');
+      const filesCollection = db.collection('files');
 
-    const files = await dbClient.db
-      .collection('files')
-      .find({
+      const query = {
         userId: new ObjectId(userId),
-        parentId: filterParentId,
-      })
-      .skip(page * 20)
-      .limit(20)
-      .toArray();
+      };
 
-    const result = [];
-
-    for (const file of files) {
-      let resPid;
-
-      if (file.parentId === '0' || file.parentId === 0) {
-        resPid = 0;
+      if (parentId === '0') {
+        query.parentId = 0;
       } else {
-        resPid = file.parentId.toString();
+        if (!ObjectId.isValid(parentId)) {
+          return res.status(200).json([]);
+        }
+        query.parentId = new ObjectId(parentId);
       }
 
-      result.push({
+      const files = await filesCollection
+        .find(query)
+        .skip(page * 20)
+        .limit(20)
+        .toArray();
+
+      // Manually format the response to match the expected output
+      const result = files.map((file) => ({
         id: file._id.toString(),
         userId: file.userId.toString(),
         name: file.name,
         type: file.type,
         isPublic: file.isPublic,
-        parentId: resPid,
-      });
-    }
+        parentId: (file.parentId === '0' || file.parentId === 0) ? 0 : file.parentId.toString(),
+      }));
 
-    return res.status(200).json(result);
+      return res.status(200).json(result);
+    } catch (error) {
+      console.error('Error in getIndex:', error);
+      return res.status(500).json({ error: 'Internal Server Error' });
+    }
   }
 }
 

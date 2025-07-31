@@ -20,7 +20,7 @@ router.get('/disconnect', AuthController.getDisconnect);
 
 // File routes
 router.post('/files', FilesController.postUpload);
-router.get('/files/:id', FilesController.getShow);
 router.get('/files', FilesController.getIndex);
+router.get('/files/:id', FilesController.getShow);
 
 export default router;
