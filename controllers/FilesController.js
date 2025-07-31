@@ -236,14 +236,25 @@ class FilesController {
       const result = await filesCollection.findOneAndUpdate(
         { _id: new ObjectId(fileId), userId: new ObjectId(userId) },
         { $set: { isPublic: true } },
-        { returnOriginal: false },
+        { returnDocument: 'after' },
       );
 
       if (!result.value) {
         return res.status(404).json({ error: 'Not found' });
       }
+      const file = result.value;
+      const resParentId = (file.parentId === '0' || file.parentId === 0)
+        ? 0
+        : file.parentId.toString();
 
-      return res.status(200).json(result.value);
+      return res.status(200).json({
+        id: file._id.toString(),
+        userId: file.userId.toString(),
+        name: file.name,
+        type: file.type,
+        isPublic: file.isPublic,
+        parentId: resParentId,
+      });
     } catch (error) {
       return res.status(500).json({ error: 'Internal Server Error' });
     }
@@ -269,14 +280,26 @@ class FilesController {
       const result = await filesCollection.findOneAndUpdate(
         { _id: new ObjectId(fileId), userId: new ObjectId(userId) },
         { $set: { isPublic: false } },
-        { returnOriginal: false },
+        { returnDocument: 'after' },
       );
 
       if (!result.value) {
         return res.status(404).json({ error: 'Not found' });
       }
 
-      return res.status(200).json(result.value);
+      const file = result.value;
+      const resParentId = (file.parentId === '0' || file.parentId === 0)
+        ? 0
+        : file.parentId.toString();
+
+      return res.status(200).json({
+        id: file._id.toString(),
+        userId: file.userId.toString(),
+        name: file.name,
+        type: file.type,
+        isPublic: file.isPublic,
+        parentId: resParentId,
+      });
     } catch (error) {
       return res.status(500).json({ error: 'Internal Server Error' });
     }
