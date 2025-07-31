@@ -3,8 +3,12 @@ import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs';
 import path from 'path';
 import mime from 'mime-types';
+import Bull from 'bull';
 import dbClient from '../utils/db';
 import redisClient from '../utils/redis';
+
+// Create a Bull queue for file processing
+const fileQueue = new Bull('fileQueue');
 
 /**
  * Controller for handling file-related endpoints.
@@ -101,6 +105,14 @@ class FilesController {
 
       newFileDocument.localPath = localPath;
       const result = await filesCollection.insertOne(newFileDocument);
+
+      // If the file is an image, add a job to the queue for thumbnail generation
+      if (type === 'image') {
+        await fileQueue.add({
+          userId,
+          fileId: result.insertedId.toString(),
+        });
+      }
 
       res.status(201).json({
         id: result.insertedId,
@@ -333,13 +345,23 @@ class FilesController {
         return res.status(400).json({ error: "A folder doesn't have content" });
       }
 
-      if (!file.localPath || !fs.existsSync(file.localPath)) {
+      const { size } = req.query;
+      let filePath = file.localPath;
+
+      if (size) {
+        const acceptedSizes = ['500', '250', '100'];
+        if (acceptedSizes.includes(size)) {
+          filePath = `${file.localPath}_${size}`;
+        }
+      }
+
+      if (!filePath || !fs.existsSync(filePath)) {
         return res.status(404).json({ error: 'Not found' });
       }
 
       const mimeType = mime.lookup(file.name);
       res.setHeader('Content-Type', mimeType);
-      const fileContent = fs.readFileSync(file.localPath);
+      const fileContent = fs.readFileSync(filePath);
       return res.status(200).send(fileContent);
     } catch (error) {
       return res.status(404).json({ error: 'Not found' });
