@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs';
 import path from 'path';
 import dbClient from '../utils/db';
-import getAuthenticatedUserId from '../utils/auth';
+import getAuthenticatedUserId from '../utils/auth'; // Import the new utility
 
 /**
  * Controller for handling file-related endpoints.
@@ -16,6 +16,9 @@ class FilesController {
    */
   static async postUpload(req, res) {
     const userId = await getAuthenticatedUserId(req, res);
+    if (!userId) {
+      return;
+    }
 
     const {
       name,
@@ -26,14 +29,17 @@ class FilesController {
     } = req.body || {};
 
     if (!name) {
-      return res.status(400).json({ error: 'Missing name' });
+      res.status(400).json({ error: 'Missing name' });
+      return;
     }
     const acceptedTypes = ['folder', 'file', 'image'];
     if (!type || !acceptedTypes.includes(type)) {
-      return res.status(400).json({ error: 'Missing type' });
+      res.status(400).json({ error: 'Missing type' });
+      return;
     }
     if (type !== 'folder' && !data) {
-      return res.status(400).json({ error: 'Missing data' });
+      res.status(400).json({ error: 'Missing data' });
+      return;
     }
 
     try {
@@ -45,10 +51,12 @@ class FilesController {
           _id: new ObjectId(parentId),
         });
         if (!parentFile) {
-          return res.status(400).json({ error: 'Parent not found' });
+          res.status(400).json({ error: 'Parent not found' });
+          return;
         }
         if (parentFile.type !== 'folder') {
-          return res.status(400).json({ error: 'Parent is not a folder' });
+          res.status(400).json({ error: 'Parent is not a folder' });
+          return;
         }
       }
 
@@ -62,10 +70,15 @@ class FilesController {
 
       if (type === 'folder') {
         const result = await filesCollection.insertOne(newFileDocument);
-        return res.status(201).json({
+        res.status(201).json({
           id: result.insertedId,
-          ...newFileDocument,
+          userId: newFileDocument.userId,
+          name: newFileDocument.name,
+          type: newFileDocument.type,
+          isPublic: newFileDocument.isPublic,
+          parentId: newFileDocument.parentId,
         });
+        return;
       }
 
       const folderPath = process.env.FOLDER_PATH || '/tmp/files_manager';
@@ -82,7 +95,7 @@ class FilesController {
       newFileDocument.localPath = localPath;
       const result = await filesCollection.insertOne(newFileDocument);
 
-      return res.status(201).json({
+      res.status(201).json({
         id: result.insertedId,
         userId: newFileDocument.userId,
         name: newFileDocument.name,
@@ -90,12 +103,14 @@ class FilesController {
         isPublic: newFileDocument.isPublic,
         parentId: newFileDocument.parentId,
       });
+      return;
     } catch (error) {
       if (error.name === 'BSONTypeError') {
-        return res.status(400).json({ error: 'Parent not found' });
+        res.status(400).json({ error: 'Parent not found' });
+        return;
       }
       console.error('Error during file upload:', error);
-      return res.status(500).json({ error: 'Internal Server Error' });
+      res.status(500).json({ error: 'Internal Server Error' });
     }
   }
 
@@ -106,6 +121,9 @@ class FilesController {
    */
   static async getShow(req, res) {
     const userId = await getAuthenticatedUserId(req, res);
+    if (!userId) {
+      return;
+    }
 
     try {
       const db = dbClient.client.db(process.env.DB_DATABASE || 'files_manager');
@@ -115,13 +133,20 @@ class FilesController {
       });
 
       if (!file) {
-        return res.status(404).json({ error: 'Not found' });
+        res.status(404).json({ error: 'Not found' });
+        return;
       }
 
-      return res.status(200).json(file);
+      res.status(200).json(file);
+      return;
     } catch (error) {
+      // Handle cases where the file ID is not a valid ObjectId
+      if (error.name === 'BSONTypeError') {
+        res.status(404).json({ error: 'Not found' });
+        return;
+      }
       console.error('Error in getShow:', error);
-      return res.status(500).json({ error: 'Internal Server Error' });
+      res.status(500).json({ error: 'Internal Server Error' });
     }
   }
 
@@ -132,8 +157,11 @@ class FilesController {
    */
   static async getIndex(req, res) {
     const userId = await getAuthenticatedUserId(req, res);
+    if (!userId) {
+      return;
+    }
 
-    const parentId = req.query.parentId || '0';
+    const { parentId = '0' } = req.query;
     const page = parseInt(req.query.page, 10) || 0;
     const pageSize = 20;
 
@@ -141,23 +169,30 @@ class FilesController {
       const db = dbClient.client.db(process.env.DB_DATABASE || 'files_manager');
       const filesCollection = db.collection('files');
 
-      const pipeline = [
-        {
-          $match: {
-            userId: new ObjectId(userId),
-            parentId: parentId === '0' ? 0 : new ObjectId(parentId),
-          },
-        },
-        { $skip: page * pageSize },
-        { $limit: pageSize },
-      ];
+      const query = {
+        userId: new ObjectId(userId),
+        parentId: parentId === '0' ? 0 : new ObjectId(parentId),
+      };
 
-      const files = await filesCollection.aggregate(pipeline).toArray();
+      // Use find() with skip() and limit() for pagination
+      // This can be more stable than aggregate() in some environments
+      const files = await filesCollection
+        .find(query)
+        .skip(page * pageSize)
+        .limit(pageSize)
+        .toArray();
 
-      return res.status(200).json(files);
+      res.status(200).json(files);
+      return;
     } catch (error) {
+      // If parentId is not a valid ObjectId, a BSONTypeError will be thrown.
+      // In this case, we can assume no files are found and return an empty array.
+      if (error.name === 'BSONTypeError') {
+        res.status(200).json([]);
+        return;
+      }
       console.error('Error in getIndex:', error);
-      return res.status(500).json({ error: 'Internal Server Error' });
+      res.status(500).json({ error: 'Internal Server Error' });
     }
   }
 }

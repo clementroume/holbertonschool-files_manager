@@ -11,11 +11,13 @@ async function getAuthenticatedUserId(req, res) {
   const token = req.headers['x-token'];
   if (!token) {
     res.status(401).json({ error: 'Unauthorized' });
+    return null;
   }
 
   const userId = await redisClient.get(`auth_${token}`);
   if (!userId) {
     res.status(401).json({ error: 'Unauthorized' });
+    return null;
   }
 
   return userId;
