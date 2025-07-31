@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs';
 import path from 'path';
 import dbClient from '../utils/db';
-import getAuthenticatedUserId from '../utils/auth'; // Import the new utility
+import getAuthenticatedUserId from '../utils/auth';
 
 /**
  * Controller for handling file-related endpoints.
@@ -168,10 +168,17 @@ class FilesController {
       const db = dbClient.client.db(process.env.DB_DATABASE || 'files_manager');
       const filesCollection = db.collection('files');
 
-      const query = {
-        userId: new ObjectId(userId),
-        parentId: parentId === '0' ? 0 : new ObjectId(parentId),
-      };
+      // Build the query object safely
+      const query = { userId: new ObjectId(userId) };
+      if (parentId !== '0') {
+        if (!ObjectId.isValid(parentId)) {
+          res.status(200).json([]);
+          return;
+        }
+        query.parentId = new ObjectId(parentId);
+      } else {
+        query.parentId = 0;
+      }
 
       const files = await filesCollection
         .find(query)
@@ -182,10 +189,6 @@ class FilesController {
       res.status(200).json(files);
       return;
     } catch (error) {
-      if (error.name === 'BSONTypeError') {
-        res.status(200).json([]);
-        return;
-      }
       console.error('Error in getIndex:', error);
       res.status(500).json({ error: 'Internal Server Error' });
     }
