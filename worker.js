@@ -4,33 +4,25 @@ import imageThumbnail from 'image-thumbnail';
 import fs from 'fs';
 import dbClient from './utils/db';
 
-// Create a new Bull queue that connects to the same Redis instance
+// Create queues for file and user processing
 const fileQueue = new Bull('fileQueue');
+const userQueue = new Bull('userQueue');
 
-// Process jobs added to the fileQueue
+// Process jobs for generating file thumbnails
 fileQueue.process(async (job) => {
   const { fileId, userId } = job.data;
 
-  // Validate that the job contains the necessary data
-  if (!fileId) {
-    throw new Error('Missing fileId');
-  }
-  if (!userId) {
-    throw new Error('Missing userId');
-  }
+  if (!fileId) throw new Error('Missing fileId');
+  if (!userId) throw new Error('Missing userId');
 
-  // Fetch the file document from the database
   const db = dbClient.client.db(process.env.DB_DATABASE || 'files_manager');
   const file = await db.collection('files').findOne({
     _id: new ObjectId(fileId),
     userId: new ObjectId(userId),
   });
 
-  if (!file) {
-    throw new Error('File not found');
-  }
+  if (!file) throw new Error('File not found');
 
-  // Generate thumbnails for specified widths
   const widths = [500, 250, 100];
   const thumbnailPromises = widths.map(async (width) => {
     try {
@@ -46,8 +38,23 @@ fileQueue.process(async (job) => {
     }
   });
 
-  // Wait for all thumbnail generation to complete
   await Promise.all(thumbnailPromises);
 });
 
-export default fileQueue;
+// Process jobs for sending welcome emails
+userQueue.process(async (job) => {
+  const { userId } = job.data;
+
+  if (!userId) throw new Error('Missing userId');
+
+  const db = dbClient.client.db(process.env.DB_DATABASE || 'files_manager');
+  const user = await db
+    .collection('users')
+    .findOne({ _id: new ObjectId(userId) });
+
+  if (!user) throw new Error('User not found');
+
+  console.log(`Welcome ${user.email}!`);
+});
+
+export { fileQueue, userQueue };

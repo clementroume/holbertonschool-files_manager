@@ -1,21 +1,21 @@
-import sha1 from 'sha1';
+import Bull from 'bull';
 import { ObjectId } from 'mongodb';
+import sha1 from 'sha1';
 import dbClient from '../utils/db';
 import redisClient from '../utils/redis';
 
+// Créer une file d'attente Bull pour les tâches liées aux utilisateurs
+const userQueue = new Bull('userQueue');
+
 /**
- * Controller for handling user-related endpoints.
+ * Contrôleur pour la gestion des points de terminaison liés aux utilisateurs.
  */
 class UsersController {
   /**
-   * Handles the creation of a new user.
-   * It validates the request body, checks if the user already exists,
-   * hashes the password, and saves the new user to the database.
-   * @param {object} req The Express request object.
-   * @param {object} res The Express response object.
+   * Gère la création d'un nouvel utilisateur.
    */
   static async postNew(req, res) {
-    const { email, password } = req.body || {};
+    const { email, password } = req.body;
 
     if (!email) {
       return res.status(400).json({ error: 'Missing email' });
@@ -39,6 +39,11 @@ class UsersController {
         password: hashedPassword,
       });
 
+      // Ajouter une tâche à la file pour envoyer un e-mail de bienvenue
+      await userQueue.add({
+        userId: result.insertedId.toString(),
+      });
+
       return res.status(201).json({ id: result.insertedId, email });
     } catch (error) {
       console.error('Error creating new user:', error);
@@ -46,6 +51,9 @@ class UsersController {
     }
   }
 
+  /**
+   * Gère la récupération des informations de l'utilisateur authentifié.
+   */
   static async getMe(req, res) {
     const token = req.headers['x-token'];
 
