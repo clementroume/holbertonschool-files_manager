@@ -22,12 +22,12 @@ router.post('/users', UsersController.postNew);
 // It calls the getMe method from the UsersController
 router.get('/users/me', UsersController.getMe);
 
-// Define the /users/me route
-// It calls the getMe method from the UsersController
+// Define the /connect route
+// It calls the getConnect method from the AuthController
 router.get('/connect', AuthController.getConnect);
 
-// Define the /users/me route
-// It calls the getMe method from the UsersController
+// Define the /disconnect route
+// It calls the getDisconnect method from the AuthController
 router.get('/disconnect', AuthController.getDisconnect);
 
 // Export the router to be used in server.js
