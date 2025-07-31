@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs';
 import path from 'path';
 import dbClient from '../utils/db';
-import getAuthenticatedUserId from '../utils/auth';
+import redisClient from '../utils/redis';
 
 /**
  * Controller for handling file-related endpoints.
@@ -15,9 +15,13 @@ class FilesController {
    * @param {object} res The Express response object.
    */
   static async postUpload(req, res) {
-    const userId = await getAuthenticatedUserId(req, res);
+    const token = req.headers['x-token'];
+    if (!token) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    const userId = await redisClient.get(`auth_${token}`);
     if (!userId) {
-      return;
+      return res.status(401).json({ error: 'Unauthorized' });
     }
 
     const {
@@ -29,17 +33,14 @@ class FilesController {
     } = req.body || {};
 
     if (!name) {
-      res.status(400).json({ error: 'Missing name' });
-      return;
+      return res.status(400).json({ error: 'Missing name' });
     }
     const acceptedTypes = ['folder', 'file', 'image'];
     if (!type || !acceptedTypes.includes(type)) {
-      res.status(400).json({ error: 'Missing type' });
-      return;
+      return res.status(400).json({ error: 'Missing type' });
     }
     if (type !== 'folder' && !data) {
-      res.status(400).json({ error: 'Missing data' });
-      return;
+      return res.status(400).json({ error: 'Missing data' });
     }
 
     try {
@@ -51,12 +52,10 @@ class FilesController {
           _id: new ObjectId(parentId),
         });
         if (!parentFile) {
-          res.status(400).json({ error: 'Parent not found' });
-          return;
+          return res.status(400).json({ error: 'Parent not found' });
         }
         if (parentFile.type !== 'folder') {
-          res.status(400).json({ error: 'Parent is not a folder' });
-          return;
+          return res.status(400).json({ error: 'Parent is not a folder' });
         }
       }
 
@@ -70,15 +69,10 @@ class FilesController {
 
       if (type === 'folder') {
         const result = await filesCollection.insertOne(newFileDocument);
-        res.status(201).json({
+        return res.status(201).json({
           id: result.insertedId,
-          userId: newFileDocument.userId,
-          name: newFileDocument.name,
-          type: newFileDocument.type,
-          isPublic: newFileDocument.isPublic,
-          parentId: newFileDocument.parentId,
+          ...newFileDocument,
         });
-        return;
       }
 
       const folderPath = process.env.FOLDER_PATH || '/tmp/files_manager';
@@ -95,7 +89,7 @@ class FilesController {
       newFileDocument.localPath = localPath;
       const result = await filesCollection.insertOne(newFileDocument);
 
-      res.status(201).json({
+      return res.status(201).json({
         id: result.insertedId,
         userId: newFileDocument.userId,
         name: newFileDocument.name,
@@ -103,14 +97,12 @@ class FilesController {
         isPublic: newFileDocument.isPublic,
         parentId: newFileDocument.parentId,
       });
-      return;
     } catch (error) {
       if (error.name === 'BSONTypeError') {
-        res.status(400).json({ error: 'Parent not found' });
-        return;
+        return res.status(400).json({ error: 'Parent not found' });
       }
       console.error('Error during file upload:', error);
-      res.status(500).json({ error: 'Internal Server Error' });
+      return res.status(500).json({ error: 'Internal Server Error' });
     }
   }
 
@@ -120,9 +112,13 @@ class FilesController {
    * @param {object} res The Express response object.
    */
   static async getShow(req, res) {
-    const userId = await getAuthenticatedUserId(req, res);
+    const token = req.headers['x-token'];
+    if (!token) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    const userId = await redisClient.get(`auth_${token}`);
     if (!userId) {
-      return;
+      return res.status(401).json({ error: 'Unauthorized' });
     }
 
     try {
@@ -133,19 +129,13 @@ class FilesController {
       });
 
       if (!file) {
-        res.status(404).json({ error: 'Not found' });
-        return;
+        return res.status(404).json({ error: 'Not found' });
       }
 
-      res.status(200).json(file);
-      return;
+      return res.status(200).json(file);
     } catch (error) {
-      if (error.name === 'BSONTypeError') {
-        res.status(404).json({ error: 'Not found' });
-        return;
-      }
       console.error('Error in getShow:', error);
-      res.status(500).json({ error: 'Internal Server Error' });
+      return res.status(500).json({ error: 'Internal Server Error' });
     }
   }
 
@@ -155,12 +145,16 @@ class FilesController {
    * @param {object} res The Express response object.
    */
   static async getIndex(req, res) {
-    const userId = await getAuthenticatedUserId(req, res);
+    const token = req.headers['x-token'];
+    if (!token) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    const userId = await redisClient.get(`auth_${token}`);
     if (!userId) {
-      return;
+      return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const { parentId = '0' } = req.query;
+    const parentId = req.query.parentId || '0';
     const page = parseInt(req.query.page, 10) || 0;
     const pageSize = 20;
 
@@ -168,29 +162,23 @@ class FilesController {
       const db = dbClient.client.db(process.env.DB_DATABASE || 'files_manager');
       const filesCollection = db.collection('files');
 
-      // Build the query object safely
-      const query = { userId: new ObjectId(userId) };
-      if (parentId !== '0') {
-        if (!ObjectId.isValid(parentId)) {
-          res.status(200).json([]);
-          return;
-        }
-        query.parentId = new ObjectId(parentId);
-      } else {
-        query.parentId = 0;
-      }
+      const pipeline = [
+        {
+          $match: {
+            userId: new ObjectId(userId),
+            parentId: parentId === '0' ? 0 : new ObjectId(parentId),
+          },
+        },
+        { $skip: page * pageSize },
+        { $limit: pageSize },
+      ];
 
-      const files = await filesCollection
-        .find(query)
-        .skip(page * pageSize)
-        .limit(pageSize)
-        .toArray();
+      const files = await filesCollection.aggregate(pipeline).toArray();
 
-      res.status(200).json(files);
-      return;
+      return res.status(200).json(files);
     } catch (error) {
       console.error('Error in getIndex:', error);
-      res.status(500).json({ error: 'Internal Server Error' });
+      return res.status(500).json({ error: 'Internal Server Error' });
     }
   }
 }
