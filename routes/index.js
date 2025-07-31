@@ -14,7 +14,7 @@ router.get('/status', AppController.getStatus);
 router.get('/stats', AppController.getStats);
 
 // Define the /users route
-// It calls the getStats method from the AppController
+// It calls the postNew method from the UsersController
 router.post('/users', UsersController.postNew);
 
 // Export the router to be used in server.js
