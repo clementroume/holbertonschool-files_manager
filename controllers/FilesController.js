@@ -140,7 +140,6 @@ class FilesController {
       res.status(200).json(file);
       return;
     } catch (error) {
-      // Handle cases where the file ID is not a valid ObjectId
       if (error.name === 'BSONTypeError') {
         res.status(404).json({ error: 'Not found' });
         return;
@@ -174,8 +173,6 @@ class FilesController {
         parentId: parentId === '0' ? 0 : new ObjectId(parentId),
       };
 
-      // Use find() with skip() and limit() for pagination
-      // This can be more stable than aggregate() in some environments
       const files = await filesCollection
         .find(query)
         .skip(page * pageSize)
@@ -185,8 +182,6 @@ class FilesController {
       res.status(200).json(files);
       return;
     } catch (error) {
-      // If parentId is not a valid ObjectId, a BSONTypeError will be thrown.
-      // In this case, we can assume no files are found and return an empty array.
       if (error.name === 'BSONTypeError') {
         res.status(200).json([]);
         return;
