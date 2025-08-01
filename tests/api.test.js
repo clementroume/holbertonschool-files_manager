@@ -14,17 +14,16 @@ describe('api Endpoints', () => {
   let authToken;
   let testFileId;
 
-  it('should GET /status return the status of the services', () =>
-    new Promise((done) => {
-      chai
-        .request(server)
-        .get('/status')
-        .end((err, res) => {
-          expect(res).to.have.status(200);
-          expect(res.body).to.deep.equal({ redis: true, db: true });
-          done();
-        });
-    }));
+  it('should GET /status return the status of the services', (done) => {
+    chai
+      .request(server)
+      .get('/status')
+      .end((err, res) => {
+        expect(res).to.have.status(200);
+        expect(res.body).to.deep.equal({ redis: true, db: true });
+        done();
+      });
+  });
 
   it('should GET /stats return the number of users and files', (done) => {
     chai
