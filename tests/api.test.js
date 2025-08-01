@@ -1,6 +1,6 @@
 import chai from 'chai';
 import chaiHttp from 'chai-http';
-import server from '../server'; // Assuming your server.js exports the app
+import server from '../server';
 
 chai.use(chaiHttp);
 const { expect } = chai;
@@ -15,7 +15,7 @@ describe('api Endpoints', () => {
   let testFileId;
 
   // GET /status
-  it('get /status should return the status of the services', (done) => {
+  it('should get /status should return the status of the services', (done) => {
     chai
       .request(server)
       .get('/status')
@@ -27,7 +27,7 @@ describe('api Endpoints', () => {
   });
 
   // GET /stats
-  it('GET /stats should return the number of users and files', (done) => {
+  it('should GET /stats should return the number of users and files', (done) => {
     chai
       .request(server)
       .get('/stats')
@@ -40,7 +40,7 @@ describe('api Endpoints', () => {
   });
 
   // POST /users
-  it('POST /users should create a new user', (done) => {
+  it('should POST /users should create a new user', (done) => {
     chai
       .request(server)
       .post('/users')
@@ -54,7 +54,7 @@ describe('api Endpoints', () => {
   });
 
   // GET /connect
-  it('GET /connect should sign in the user and return a token', (done) => {
+  it('should GET /connect should sign in the user and return a token', (done) => {
     chai
       .request(server)
       .get('/connect')
@@ -68,7 +68,7 @@ describe('api Endpoints', () => {
   });
 
   // GET /users/me
-  it('GET /users/me should return the authenticated user', (done) => {
+  it('should GET /users/me should return the authenticated user', (done) => {
     chai
       .request(server)
       .get('/users/me')
@@ -81,7 +81,7 @@ describe('api Endpoints', () => {
   });
 
   // POST /files
-  it('POST /files should upload a new file', (done) => {
+  it('should POST /files should upload a new file', (done) => {
     chai
       .request(server)
       .post('/files')
@@ -100,7 +100,7 @@ describe('api Endpoints', () => {
   });
 
   // GET /files/:id
-  it('GET /files/:id should retrieve a specific file', (done) => {
+  it('should GET /files/:id should retrieve a specific file', (done) => {
     chai
       .request(server)
       .get(`/files/${testFileId}`)
@@ -113,7 +113,7 @@ describe('api Endpoints', () => {
   });
 
   // GET /files (pagination)
-  it('GET /files should retrieve a list of files', (done) => {
+  it('should GET /files should retrieve a list of files', (done) => {
     chai
       .request(server)
       .get('/files')
@@ -126,7 +126,7 @@ describe('api Endpoints', () => {
   });
 
   // PUT /files/:id/publish
-  it('PUT /files/:id/publish should publish a file', (done) => {
+  it('should PUT /files/:id/publish should publish a file', (done) => {
     chai
       .request(server)
       .put(`/files/${testFileId}/publish`)
@@ -139,7 +139,7 @@ describe('api Endpoints', () => {
   });
 
   // GET /files/:id/data
-  it('GET /files/:id/data should retrieve file content', (done) => {
+  it('should GET /files/:id/data should retrieve file content', (done) => {
     chai
       .request(server)
       .get(`/files/${testFileId}/data`)
@@ -151,7 +151,7 @@ describe('api Endpoints', () => {
   });
 
   // GET /disconnect
-  it('GET /disconnect should sign out the user', (done) => {
+  it('should GET /disconnect should sign out the user', (done) => {
     chai
       .request(server)
       .get('/disconnect')
